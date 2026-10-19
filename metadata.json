@@ -1,0 +1,6 @@
+{
+  "name": "InfraTrack",
+  "description": "IT Infrastructure and Asset Management web app featuring an interactive 42U rack elevation viewer, port-to-port cable tracing, hardware intake provisioning, and PostgreSQL Prisma schema models.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

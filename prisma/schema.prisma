@@ -1,0 +1,145 @@
+// This is the Prisma schema file for InfraTrack IT Infrastructure & Asset Management
+// Learn more about Prisma schema in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeviceStatus {
+  ACTIVE
+  PLANNED
+  STAGED
+  MAINTENANCE
+  OFFLINE
+}
+
+enum DeviceType {
+  SERVER
+  SWITCH
+  ROUTER
+  FIREWALL
+  PATCH_PANEL
+  PDU_UPS
+  STORAGE
+}
+
+enum PortType {
+  RJ45_1G
+  RJ45_10G
+  SFP_PLUS_10G
+  SFP28_25G
+  QSFP28_100G
+  POWER_C13
+  POWER_C19
+}
+
+enum CableType {
+  CAT6A
+  FIBER_SINGLEMODE_OS2
+  FIBER_MULTIMODE_OM4
+  DAC_TWINAX
+}
+
+model Site {
+  id        String   @id @default(uuid())
+  name      String   // e.g., "Ashburn DC-1 (Equinix DC11)"
+  location  String   // e.g., "Ashburn, VA, USA"
+  facility  String?  // e.g., "Suite 400, Pod B"
+  racks     Rack[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sites")
+}
+
+model Rack {
+  id          String   @id @default(uuid())
+  name        String   // e.g., "Rack A01"
+  height      Int      @default(42) // Standard 42U EIA-310-D rack
+  siteId      String
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  devices     Device[]
+  row         String?  // e.g., "Row A"
+  maxPowerKw  Decimal? @default(10.0) // Power budget in kW
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([siteId])
+  @@map("racks")
+}
+
+model Device {
+  id              String       @id @default(uuid())
+  name            String       // e.g., "SW-CORE-01" or "HYPERVISOR-01"
+  model           String       // e.g., "Arista 7050SX3-48YC8"
+  manufacturer    String?      // e.g., "Arista Networks", "Dell", "Cisco"
+  serialNumber    String       @unique
+  assetTag        String?      @unique
+  deviceType      DeviceType   @default(SERVER)
+  rackId          String
+  rack            Rack         @relation(fields: [rackId], references: [id], onDelete: Cascade)
+  startU          Int          // Bottom-most rack unit position (1 to 42)
+  unitHeight      Int          @default(1) // 1U, 2U, 3U, 4U etc.
+  status          DeviceStatus @default(ACTIVE)
+  ipAddress       String?      // e.g., "10.20.4.15"
+  macAddress      String?      // e.g., "00:1A:2B:3C:4D:5E"
+  powerDrawWatts  Int?         @default(350)
+  depthMm         Int?         @default(800)
+  ports           Port[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([rackId])
+  @@index([status])
+  @@map("devices")
+}
+
+model Port {
+  id               String      @id @default(uuid())
+  portNumber       Int         // Sequential port index (1..48)
+  label            String?     // e.g., "Eth1/1" or "ge-0/0/0"
+  portType         PortType    @default(RJ45_1G)
+  deviceId         String
+  device           Device      @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  
+  // Port-to-Port direct cable connection
+  connectedPortId  String?     @unique
+  connectedPort    Port?       @relation("PortToPortCable", fields: [connectedPortId], references: [id], onDelete: SetNull)
+  remoteCablePeer  Port?       @relation("PortToPortCable")
+
+  // VLAN assignment (802.1Q untagged access or primary management)
+  vlanId           String?
+  vlan             VLAN?       @relation(fields: [vlanId], references: [id], onDelete: SetNull)
+
+  // Physical Cable Run metadata
+  cableType        CableType?  @default(CAT6A)
+  cableColor       String?     @default("BLUE") // Hex or token: e.g. #3b82f6
+  linkSpeed        String?     @default("10Gbps") // 1Gbps, 10Gbps, 25Gbps, 100Gbps
+  isUp             Boolean     @default(true)
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([deviceId])
+  @@index([vlanId])
+  @@map("ports")
+}
+
+model VLAN {
+  id          String   @id @default(uuid())
+  vlanNumber  Int      @unique // 1 - 4094 standard 802.1Q VID
+  name        String   // e.g., "MGMT", "PROD-WEB", "STORAGE-SAN"
+  description String?
+  subnet      String?  // e.g., "10.10.10.0/24"
+  colorHex    String?  @default("#38bdf8")
+  ports       Port[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("vlans")
+}
